@@ -1,0 +1,25 @@
+{
+    "compilerOptions": {
+      "lib": ["ESNext"],                // Usa bibliotecas modernas
+      "rootDir": "./src",               // Pasta principal do projeto (arquivos TypeScript)
+      "outDir": "./dist",               // Pasta de saída para os arquivos transpilados
+      "target": "ESNext",               // Transpila para a versão mais recente do JavaScript
+      "module": "CommonJS",             // Módulo padrão usado no Node.js
+      "moduleResolution": "Node",       // Resolve módulos como o Node.js faz
+      "sourceMap": false,               // Não gera mapas de origem para depuração (pode habilitar se necessário)
+      "emitDecoratorMetadata": false,   // Desativa metadados para decoradores
+      "allowSyntheticDefaultImports": true, // Permite importações padrão mesmo sem suporte do ES
+      "esModuleInterop": true,          // Habilita interoperabilidade com módulos ES
+      "forceConsistentCasingInFileNames": true, // Garante consistência de maiúsculas/minúsculas nos nomes de arquivos
+      "strict": true,                   // Habilita verificações estritas no TypeScript
+      "skipLibCheck": true,             // Ignora a checagem de tipos em arquivos de bibliotecas
+      "skipDefaultLibCheck": true,      // Ignora checagem das bibliotecas padrão
+      "declaration": false,             // Não gera arquivos `.d.ts` (útil para bibliotecas)
+      "resolveJsonModule": true,        // Permite importar arquivos `.json`
+      "importHelpers": true,            // Usa funções auxiliares compartilhadas
+      "experimentalDecorators": true    // Habilita decoradores experimentais
+    },
+    "include": ["src"],                 // Inclui apenas a pasta `src` no projeto
+    "exclude": ["node_modules", "**/*.spec.ts"] // Exclui dependências e testes
+  }
+  
