@@ -11,7 +11,7 @@ import path from "path";
 const client = new ExtendedClient();
            
   client.start();    
-  ewqeweqweqweqw
+  
        
 
   export { client, config } 
