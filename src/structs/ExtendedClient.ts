@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import { green } from 'colors';
 import { EventType } from "./types/Event";
+import { equal } from "assert";
 dotenv.config(); 	
 
 const fileCondition = (fileName: string) => fileName.endsWith(".ts") || fileName.endsWith(".js");
@@ -89,10 +90,16 @@ export class ExtendedClient extends Client{
             })
         })
     }
-
-
-
 }
 
-aweaeaweaweaaewe
-ewaewaeawea
+
+
+ewewqeqe
+qweqw
+equaleqw
+eqw
+e
+qweqw
+eqw
+
+weq
