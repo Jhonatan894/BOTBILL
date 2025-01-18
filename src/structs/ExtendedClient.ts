@@ -89,8 +89,5 @@ export class ExtendedClient extends Client{
             })
         })
     }
-
-
-
 }
 
