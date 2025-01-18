@@ -17,7 +17,7 @@ export default new Command({
     });
 
     interaction.reply({
-      ephemeral: true,
+      ephemeral: false,
       content: "RECEBA O PONG BILL!!",
       components: [row],
     });
