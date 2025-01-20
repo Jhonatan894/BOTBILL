@@ -1,7 +1,7 @@
 import { ApplicationCommandType, Guild, VoiceChannel, GuildMember, PermissionResolvable } from "discord.js";
 import { Command } from "../../structs/types/Command";
 import { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, StreamType } from "@discordjs/voice";
-import play from "play-dl";
+import play, { dz_advanced_track_search, search, spotify } from "play-dl";
 
 const queue = new Map<string, QueueItem>(); // Fila de músicas
 
@@ -28,7 +28,7 @@ export default new Command({
     {
       name: "play",
       description: "Tocar uma música (YouTube, Spotify, SoundCloud ou arquivo de áudio)",
-      type: 3,  // Tipo de opção Stringg
+      type: 3,  // Tipo de opção String
       required: true,
     },
   ],
@@ -69,7 +69,7 @@ export default new Command({
     if (spotifyInfo) {
       const searchResult = await play.search(spotifyInfo.name, { limit: 1 });
       if (!searchResult.length) {
-        return interaction.reply({ content: "Não foi possível encontrar esta música no YouTube!", flags: 64 });
+        return interaction.reply({ content: "Não foi possível encontrar esta música!", flags: 64 });
       }
       musicLink = searchResult[0].url; // Converte para YouTube
     }

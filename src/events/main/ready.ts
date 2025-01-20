@@ -13,7 +13,6 @@ export default new Event({
         console.log(`Selects Menus loaded: ${selects.size}`.cyan);
         console.log(`Modals loaded: ${modals.size}`.cyan);
 
-
     },
       
     });
