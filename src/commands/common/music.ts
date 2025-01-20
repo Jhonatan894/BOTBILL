@@ -1,6 +1,6 @@
 import { ApplicationCommandType, Guild, VoiceChannel, GuildMember } from "discord.js";
 import { Command } from "../../structs/types/Command";
-import { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } from "@discordjs/voice";
+import { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, StreamType } from "@discordjs/voice";
 import play from "play-dl";
 
 export default new Command({
@@ -19,8 +19,8 @@ export default new Command({
     if (!interaction.isChatInputCommand()) return;
 
     const guild = interaction.guild as Guild;
-    const member = interaction.member;
 
+    const member = interaction.member;
     if (!(member instanceof GuildMember)) {
       return interaction.reply({
         content: "Você precisa estar em um servidor para usar este comando.",
@@ -29,11 +29,10 @@ export default new Command({
     }
 
     const userChannel = member.voice.channel as VoiceChannel;
-
     if (!userChannel) {
       return interaction.reply({
         content: "Você precisa estar em um canal de voz para usar este comando!",
-        ephemeral: false,
+        ephemeral: true,
       });
     }
 
@@ -56,9 +55,12 @@ export default new Command({
         adapterCreator: guild.voiceAdapterCreator,
       });
 
+      // Usando play-dl para obter o stream
       const stream = await play.stream(musicLink);
+
+      // Criando recurso de áudio para Discord
       const resource = createAudioResource(stream.stream, {
-        inputType: stream.type,
+        inputType: StreamType.Arbitrary, // Arbitrário, já que o stream está em formato apropriado
       });
 
       const player = createAudioPlayer();
@@ -71,10 +73,18 @@ export default new Command({
 
       player.on("error", (error) => {
         console.error("Erro no player:", error.message);
+        interaction.followUp({
+          content: "Ocorreu um erro ao reproduzir a música.",
+          ephemeral: true,
+        });
       });
 
       player.on("stateChange", (oldState, newState) => {
         if (newState.status === AudioPlayerStatus.Idle) {
+          interaction.followUp({
+            content: "A música terminou. Saindo do canal de voz.",
+            ephemeral: true,
+          });
           connection.destroy(); // Desconecta após a música terminar
         }
       });
