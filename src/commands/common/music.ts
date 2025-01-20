@@ -28,7 +28,7 @@ export default new Command({
     {
       name: "play",
       description: "Tocar uma música (YouTube, Spotify, SoundCloud ou arquivo de áudio)",
-      type: 3,  // Tipo de opção String
+      type: 3,  // Tipo de opção Stringg
       required: true,
     },
   ],
