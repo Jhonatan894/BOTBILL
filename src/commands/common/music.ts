@@ -39,22 +39,22 @@ export default new Command({
     const member = interaction.member;
 
     if (!(member instanceof GuildMember)) {
-      return interaction.reply({ content: "Você precisa estar em um servidor para usar este comando.", ephemeral: true });
+      return interaction.reply({ content: "Você precisa estar em um servidor para usar este comando.", flags: 64 });
     }
 
     const userChannel = member.voice.channel as VoiceChannel;
 
     if (!userChannel) {
-      return interaction.reply({ content: "Você precisa estar em um canal de voz para usar este comando!", ephemeral: true });
+      return interaction.reply({ content: "Você precisa estar em um canal de voz para usar este comando!", flags: 64 });
     }
 
     // Verificação de permissões no canal de voz
     const permissions = userChannel.permissionsFor(interaction.client.user);
     if (!permissions || !permissions.has("CONNECT" as PermissionResolvable)) {
-      return interaction.reply({ content: "Não consigo me conectar ao seu canal de voz, verifique se tenho as permissões adequadas!", ephemeral: true });
+      return interaction.reply({ content: "Não consigo me conectar ao seu canal de voz, verifique se tenho as permissões adequadas!", flags: 64 });
     }
     if (!permissions.has("SPEAK" as PermissionResolvable)) {
-      return interaction.reply({ content: "Não posso falar neste canal de voz, verifique se eu tenho as permissões adequadas!", ephemeral: true });
+      return interaction.reply({ content: "Não posso falar neste canal de voz, verifique se eu tenho as permissões adequadas!", flags: 64 });
     }
 
     let musicLink = interaction.options.getString("play", true);
@@ -69,7 +69,7 @@ export default new Command({
     if (spotifyInfo) {
       const searchResult = await play.search(spotifyInfo.name, { limit: 1 });
       if (!searchResult.length) {
-        return interaction.reply({ content: "Não foi possível encontrar esta música no YouTube!", ephemeral: true });
+        return interaction.reply({ content: "Não foi possível encontrar esta música no YouTube!", flags: 64 });
       }
       musicLink = searchResult[0].url; // Converte para YouTube
     }
@@ -78,7 +78,7 @@ export default new Command({
     if (!isYouTubeLink && !isDirectAudio && !play.soundcloud(musicLink)) {
       return interaction.reply({
         content: "Por favor, forneça um link válido do YouTube, Spotify, SoundCloud ou um arquivo de áudio direto!",
-        ephemeral: true,
+        flags: 64,
       });
     }
 
@@ -132,7 +132,7 @@ export default new Command({
 
       player.on("error", (error) => {
         console.error("Erro no player:", error.message);
-        interaction.followUp({ content: "Ocorreu um erro ao reproduzir a música.", ephemeral: true });
+        interaction.followUp({ content: "Ocorreu um erro ao reproduzir a música.", flags: 64 });
       });
 
       player.on("stateChange", (oldState, newState) => {
