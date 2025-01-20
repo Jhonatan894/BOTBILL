@@ -17,9 +17,15 @@
       "declaration": false,             // Não gera arquivos `.d.ts` (útil para bibliotecas)
       "resolveJsonModule": true,        // Permite importar arquivos `.json`
       "importHelpers": true,            // Usa funções auxiliares compartilhadas
-      "experimentalDecorators": true    // Habilita decoradores experimentais
+      "experimentalDecorators": true,    // Habilita decoradores experimentais
+  
+      
+
     },
     "include": ["src"],                 // Inclui apenas a pasta `src` no projeto
     "exclude": ["node_modules", "**/*.spec.ts"] // Exclui dependências e testes
+    
   }
+
+  
   

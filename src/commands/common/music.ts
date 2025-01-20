@@ -1,9 +1,7 @@
 import { ApplicationCommandType, Guild, VoiceChannel, GuildMember } from "discord.js";
 import { Command } from "../../structs/types/Command";
-import { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, StreamType } from "@discordjs/voice";
-import ytdl from "ytdl-core";
-import { FFmpeg } from "prism-media"; // Importando o FFmpeg do prism-media
-import { createReadStream } from "fs"; // Importando para leitura do arquivo se necessário
+import { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } from "@discordjs/voice";
+import play from "play-dl";
 
 export default new Command({
   name: "music",
@@ -11,9 +9,9 @@ export default new Command({
   type: ApplicationCommandType.ChatInput,
   options: [
     {
-      name: "play",
+      name: "music",
       description: "Tocar uma música usando um link do YouTube",
-      type: 3, // String option type (corrigido)
+      type: 3, // String option type
       required: true,
     },
   ],
@@ -21,28 +19,26 @@ export default new Command({
     if (!interaction.isChatInputCommand()) return;
 
     const guild = interaction.guild as Guild;
-
-    // Verificando se o membro é do tipo GuildMember
     const member = interaction.member;
 
     if (!(member instanceof GuildMember)) {
-      return interaction.reply({ content: "Você precisa estar em um servidor para usar este comando.", ephemeral: true });
+      return interaction.reply({ content: "Você precisa estar em um servidor para usar este comando.", flags: 64 });
     }
 
     const userChannel = member.voice.channel as VoiceChannel;
 
     if (!userChannel) {
-      return interaction.reply({ content: "Você precisa estar em um canal de voz para usar este comando!", ephemeral: true });
+      return interaction.reply({ content: "Você precisa estar em um canal de voz para usar este comando!", flags: 64 });
     }
 
-    const musicLink = interaction.options.getString("play", true);
+    const musicLink = interaction.options.getString("music", true);
 
     // Verificar se a URL fornecida é válida
-    if (!ytdl.validateURL(musicLink)) {
-      return interaction.reply({ content: "Por favor, forneça um link válido do YouTube!", ephemeral: true });
+    if (!(await play.validate(musicLink))) {
+      return interaction.reply({ content: "Por favor, forneça um link válido do YouTube!", flags: 64 });
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: 64 });
 
     try {
       const connection = joinVoiceChannel({
@@ -51,23 +47,9 @@ export default new Command({
         adapterCreator: guild.voiceAdapterCreator,
       });
 
-      // Criação do stream de áudio usando FFmpeg
-      const stream = ytdl(musicLink, { filter: "audioonly", quality: "highestaudio" });
-
-      // Usando prism-media para transformar o stream de áudio
-      const ffmpeg = new FFmpeg({
-        args: [
-          "-an", // Desativar vídeo
-          "-f", "wav", // Formato do áudio
-          "-ar", "48000", // Taxa de amostragem
-          "-ac", "2", // Canais estéreo
-        ],
-        shell: true,
-      });
-
-      // Passando o stream do YouTube para o FFmpeg
-      const resource = createAudioResource(stream.pipe(ffmpeg), {
-        inputType: StreamType.Arbitrary, // Usar StreamType.Arbitrary para streams genéricos
+      const stream = await play.stream(musicLink);
+      const resource = createAudioResource(stream.stream, {
+        inputType: stream.type,
       });
 
       const player = createAudioPlayer();
@@ -77,13 +59,14 @@ export default new Command({
       await interaction.editReply({ content: `🎶 Tocando agora: ${musicLink}` });
 
       player.on("error", (error) => {
-        console.error("Erro no player:", error);
-        interaction.followUp({ content: "Ocorreu um erro ao reproduzir a música.", ephemeral: true });
+        console.error("Erro no player:", error.message);
+        interaction.followUp({ content: "Ocorreu um erro ao reproduzir a música.", flags: 64 });
       });
 
       player.on("stateChange", (oldState, newState) => {
         if (newState.status === AudioPlayerStatus.Idle) {
-          connection.destroy(); // Desconecta após a música terminar
+          interaction.followUp({ content: "A música terminou. Saindo do canal de voz.", flags: 64 });
+          connection.destroy();
         }
       });
     } catch (error) {
