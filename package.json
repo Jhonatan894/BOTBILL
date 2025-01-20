@@ -11,11 +11,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@discordjs/voice": "^0.18.0",
     "colors": "^1.4.0",
     "discord.js": "^14.17.3",
     "dotenv": "^16.4.7",
     "fs": "^0.0.1-security",
-    "ts-lib": "^0.0.5"
+    "spotify-url-info": "^3.2.18",
+    "ts-lib": "^0.0.5",
+    "ytdl-core": "^4.11.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",
