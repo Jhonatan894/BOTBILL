@@ -1,9 +1,9 @@
-import { ApplicationCommandType, Guild, VoiceChannel, GuildMember, PermissionResolvable } from "discord.js";
+import { ApplicationCommandType, Guild, VoiceChannel, GuildMember, ChatInputCommandInteraction, PermissionResolvable } from "discord.js";
 import { Command } from "../../structs/types/Command";
 import { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, StreamType } from "@discordjs/voice";
 import play from "play-dl";
 
-const queue = new Map<string, QueueItem>(); // Fila de músicas
+const queue = new Map<string, QueueItem>(); // Fila de músicas (alterada para Map com a tipagem adequada)
 
 interface Song {
   id: string;
@@ -28,7 +28,7 @@ export default new Command({
     {
       name: "play",
       description: "Tocar uma música (YouTube, Spotify, SoundCloud ou arquivo de áudio)",
-      type: 3,  // Tipo de opção String
+      type: 3,  // Tipo de opção String (corrigido)
       required: true,
     },
   ],
@@ -58,11 +58,24 @@ export default new Command({
     }
 
     let musicLink = interaction.options.getString("play", true);
+    console.log("Link da música:", musicLink);
 
+    // Verificação do link (YouTube, Spotify, SoundCloud, ou arquivo de áudio direto)
     const isYouTubeLink = await play.validate(musicLink);
     const isDirectAudio = /\.(mp3|flac|wav|ogg)$/i.test(musicLink);
 
-    if (play.is_expired()) await play.refreshToken();
+    // Verificar se o token do Spotify está expirado e atualizá-lo se necessário
+    try {
+      console.log("Verificando token Spotify antes da expiração...");
+      console.log(play.spotifyToken);
+
+      if (play.is_expired()) {
+        console.log("Token expirado. Atualizando token...");
+        await play.refreshToken();
+      }
+    } catch (error) {
+      console.error("Erro ao verificar/atualizar o token do Spotify:", error);
+    }
 
     // Verificar se é link do Spotify
     const spotifyInfo = await play.spotify(musicLink);
@@ -96,7 +109,7 @@ export default new Command({
       if (isDirectAudio) {
         resource = createAudioResource(musicLink); // Arquivo de áudio direto
       } else {
-        const stream = await play.stream(musicLink); // Espera o stream
+        const stream = await play.stream(musicLink);
         resource = createAudioResource(stream.stream, { inputType: StreamType.Arbitrary });
       }
 
@@ -107,7 +120,7 @@ export default new Command({
       // Criando a estrutura de fila para a música
       const song: Song = {
         id: musicLink,
-        title: musicLink, // Podemos buscar o título real se necessário
+        title: musicLink, // No futuro, podemos buscar o título real se necessário
         url: musicLink,
       };
 
@@ -158,12 +171,14 @@ export default new Command({
 async function playMusic(guild: Guild, song: Song, connection: any) {
   const serverQueue = queue.get(guild.id);
 
-  if (!serverQueue) return;
+  try {
+    const stream = await play.stream(song.url); 
+    const resource = createAudioResource(stream.stream, { inputType: StreamType.Arbitrary });
+    const player = createAudioPlayer();
 
-  const stream = await play.stream(song.url); 
-  const resource = createAudioResource(stream.stream, { inputType: StreamType.Arbitrary });
-  const player = createAudioPlayer();
-
-  player.play(resource);
-  connection.subscribe(player);
+    player.play(resource);
+    connection.subscribe(player);
+  } catch (error) {
+    console.error("Erro ao buscar o stream da música:", error);
+  }
 }
