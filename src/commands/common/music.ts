@@ -1,34 +1,30 @@
-import { ApplicationCommandType, Guild, VoiceChannel, GuildMember, ChatInputCommandInteraction, PermissionResolvable } from "discord.js";
+import {
+  ApplicationCommandType,
+  Guild,
+  VoiceChannel,
+  GuildMember,
+} from "discord.js";
 import { Command } from "../../structs/types/Command";
-import { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, StreamType } from "@discordjs/voice";
-import play, { dz_advanced_track_search, search, spotify } from "play-dl";
-
-const queue = new Map<string, QueueItem>(); // Fila de músicas (alterada para Map com a tipagem adequada)
-
-interface Song {
-  id: string;
-  title: string;
-  url: string;
-}
-
-interface QueueItem {
-  textChannel: any;
-  voiceChannel: VoiceChannel;
-  connection: any;
-  songs: Song[];
-  volume: number;
-  playing: boolean;
-}
+import {
+  joinVoiceChannel,
+  createAudioPlayer,
+  createAudioResource,
+  AudioPlayerStatus,
+  VoiceConnection,
+  StreamType,
+} from "@discordjs/voice";
+import play from "play-dl";
+import { createReadStream } from "fs";
 
 export default new Command({
   name: "music",
-  description: "Controle de música",
+  description: "Tocar música do YouTube ou SoundCloud",
   type: ApplicationCommandType.ChatInput,
   options: [
     {
-      name: "play",
-      description: "Tocar uma música (YouTube, Spotify, SoundCloud ou arquivo de áudio)",
-      type: 3,  // Tipo de opção String (corrigido)
+      name: "url",
+      description: "URL da música ou playlist do YouTube/SoundCloud",
+      type: 3, // Tipo de string (URL)
       required: true,
     },
   ],
@@ -39,59 +35,46 @@ export default new Command({
     const member = interaction.member;
 
     if (!(member instanceof GuildMember)) {
-      return interaction.reply({ content: "Você precisa estar em um servidor para usar este comando.", flags: 64 });
+      return interaction.reply({
+        content: "Você precisa estar em um servidor para usar este comando.",
+        ephemeral: true,
+      });
     }
 
     const userChannel = member.voice.channel as VoiceChannel;
 
     if (!userChannel) {
-      return interaction.reply({ content: "Você precisa estar em um canal de voz para usar este comando!", flags: 64 });
-    }
-
-    // Verificação de permissões no canal de voz
-    const permissions = userChannel.permissionsFor(interaction.client.user);
-    if (!permissions || !permissions.has("CONNECT" as PermissionResolvable)) {
-      return interaction.reply({ content: "Não consigo me conectar ao seu canal de voz, verifique se tenho as permissões adequadas!", flags: 64 });
-    }
-    if (!permissions.has("SPEAK" as PermissionResolvable)) {
-      return interaction.reply({ content: "Não posso falar neste canal de voz, verifique se eu tenho as permissões adequadas!", flags: 64 });
-    }
-
-    let musicLink = interaction.options.getString("play", true);
-    console.log("Link da música:", musicLink);
-
-    // Verificação do link (YouTube, Spotify, SoundCloud, ou arquivo de áudio direto)
-    const isYouTubeLink = await play.validate(musicLink);
-    const isDirectAudio = /\.(mp3|flac|wav|ogg)$/i.test(musicLink);
-
-    // Verificar se o token do Spotify está expirado e atualizá-lo se necessário
-    try {
-      console.log("Verificando token Spotify antes da expiração...");
-      console.log(play.spotifyToken);
-
-      if (play.is_expired()) {
-        console.log("Token expirado. Atualizando token...");
-        await play.refreshToken();
-      }
-    } catch (error) {
-      console.error("Erro ao verificar/atualizar o token do Spotify:", error);
-    }
-
-    // Verificar se é link do Spotify
-    const spotifyInfo = await play.spotify(musicLink);
-    if (spotifyInfo) {
-      const searchResult = await play.search(spotifyInfo.name, { limit: 1 });
-      if (!searchResult.length) {
-        return interaction.reply({ content: "Não foi possível encontrar esta música!", flags: 64 });
-      }
-      musicLink = searchResult[0].url; // Converte para YouTube
-    }
-
-    // Verificar se é link do SoundCloud
-    if (!isYouTubeLink && !isDirectAudio && !play.soundcloud(musicLink)) {
       return interaction.reply({
-        content: "Por favor, forneça um link válido do YouTube, Spotify, SoundCloud ou um arquivo de áudio direto!",
-        flags: 64,
+        content:
+          "Você precisa estar em um canal de voz para usar este comando!",
+        ephemeral: true,
+      });
+    }
+
+    const musicUrl = interaction.options.getString("url", true);
+
+    // Validar o link do YouTube ou SoundCloud
+    const isValid = await play.validate(musicUrl);
+
+    if (
+      !isValid ||
+      (isValid !== "yt_video" &&
+        isValid !== "yt_playlist" &&
+        isValid !== "so_track" &&
+        isValid !== "so_playlist")
+    ) {
+      return interaction.reply({
+        content:
+          "O link fornecido não é válido! Por favor, insira um link válido do YouTube ou SoundCloud.",
+        ephemeral: true,
+      });
+    }
+
+    if (isValid === "yt_playlist" || isValid === "so_playlist") {
+      return interaction.reply({
+        content:
+          "Ainda não suportamos a reprodução de playlists. Por favor, forneça um link de música.",
+        ephemeral: true,
       });
     }
 
@@ -99,86 +82,83 @@ export default new Command({
 
     try {
       // Conectar ao canal de voz
-      const connection = joinVoiceChannel({
+      const connection: VoiceConnection = joinVoiceChannel({
         channelId: userChannel.id,
         guildId: guild.id,
         adapterCreator: guild.voiceAdapterCreator,
       });
 
-      let resource;
-      if (isDirectAudio) {
-        resource = createAudioResource(musicLink); // Arquivo de áudio direto
-      } else {
-        const stream = await play.stream(musicLink);
-        resource = createAudioResource(stream.stream, { inputType: StreamType.Arbitrary });
-      }
+      console.log("Tentando obter o stream da URL...");
+      const stream = await play.stream(musicUrl);
+
+      console.log("Stream obtido com sucesso. Detalhes do stream:", stream);
+
+      // Criar o recurso de áudio
+      const resource = createAudioResource(stream.stream, {
+        inputType: stream.type, // Deve ser 'opus'
+      });
 
       const player = createAudioPlayer();
       player.play(resource);
       connection.subscribe(player);
 
-      // Criando a estrutura de fila para a música
-      const song: Song = {
-        id: musicLink,
-        title: musicLink, // No futuro, podemos buscar o título real se necessário
-        url: musicLink,
-      };
+      console.log("Recurso de áudio criado e tocando...");
 
-      // Adiciona à fila de músicas
-      const serverQueue = queue.get(guild.id) || {
-        textChannel: interaction.channel,
-        voiceChannel: userChannel,
-        connection: connection,
-        songs: [song],
-        volume: 5,
-        playing: true,
-      };
-
-      queue.set(guild.id, serverQueue);
-
-      // Inicia a reprodução da música
-      if (!serverQueue.playing) {
-        playMusic(guild, serverQueue.songs[0], connection);
-      }
-
-      await interaction.editReply({ content: `🎶 Tocando agora: ${musicLink}` });
-
-      player.on("error", (error) => {
-        console.error("Erro no player:", error.message);
-        interaction.followUp({ content: "Ocorreu um erro ao reproduzir a música.", flags: 64 });
+      await interaction.editReply({
+        content: `🎶 Tocando música: ${musicUrl}`,
       });
 
-      player.on("stateChange", (oldState, newState) => {
-        if (newState.status === AudioPlayerStatus.Idle) {
-          serverQueue.songs.shift(); // Remove a música da fila quando terminar
-          if (serverQueue.songs.length > 0) {
-            playMusic(guild, serverQueue.songs[0], connection);
-          } else {
-            connection.destroy(); // Desconecta após a música terminar
-            queue.delete(guild.id);
-          }
-        }
+      // Tratamento de eventos do player
+      player.on("error", (error) => {
+        console.error("Erro no player:", error);
+        interaction.followUp({
+          content: "Ocorreu um erro ao reproduzir a música.",
+          ephemeral: true,
+        });
+      });
+
+      player.on(AudioPlayerStatus.Playing, () => {
+        console.log("🎵 Música está tocando...");
+      });
+
+      player.on(AudioPlayerStatus.Idle, () => {
+        console.log("⏹ Música finalizada. Desconectando...");
+        connection.destroy(); // Desconecta após a música terminar
       });
     } catch (error) {
       console.error("Erro ao tocar música:", error);
       await interaction.editReply({
         content: "Ocorreu um erro ao tentar tocar a música.",
       });
+
+      // Teste com áudio local em caso de erro
+      try {
+        const connection: VoiceConnection = joinVoiceChannel({
+          channelId: userChannel.id,
+          guildId: guild.id,
+          adapterCreator: guild.voiceAdapterCreator,
+        });
+
+        console.log("Tentando tocar áudio local para depuração...");
+        const resource = createAudioResource(
+          createReadStream("./audio.mp3"), // Certifique-se de que esse arquivo exista
+          { inputType: StreamType.Arbitrary }
+        );
+
+        const player = createAudioPlayer();
+        player.play(resource);
+        connection.subscribe(player);
+
+        await interaction.editReply({
+          content: `🎶 Não foi possível reproduzir o link. Tocando um áudio local para teste.`,
+        });
+      } catch (localError) {
+        console.error("Erro ao tentar tocar o áudio local:", localError);
+        await interaction.editReply({
+          content:
+            "Ocorreu um erro ao tentar tocar a música, nem mesmo o áudio local pôde ser reproduzido.",
+        });
+      }
     }
   },
 });
-
-async function playMusic(guild: Guild, song: Song, connection: any) {
-  const serverQueue = queue.get(guild.id);
-
-  try {
-    const stream = await play.stream(song.url); 
-    const resource = createAudioResource(stream.stream, { inputType: StreamType.Arbitrary });
-    const player = createAudioPlayer();
-
-    player.play(resource);
-    connection.subscribe(player);
-  } catch (error) {
-    console.error("Erro ao buscar o stream da música:", error);
-  }
-}

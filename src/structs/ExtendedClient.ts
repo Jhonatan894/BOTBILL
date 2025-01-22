@@ -7,6 +7,7 @@ import { green } from 'colors';
 import { EventType } from "./types/Event";
 dotenv.config(); 	
 
+
 const fileCondition = (fileName: string) => fileName.endsWith(".ts") || fileName.endsWith(".js");
 
 export class ExtendedClient extends Client{
