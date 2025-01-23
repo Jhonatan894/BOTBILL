@@ -1,164 +1,172 @@
-import {
-  ApplicationCommandType,
-  Guild,
-  VoiceChannel,
-  GuildMember,
-} from "discord.js";
-import { Command } from "../../structs/types/Command";
+import { CommandType } from "../../structs/types/Command";
+import { VoiceChannel, GuildMember } from "discord.js";
 import {
   joinVoiceChannel,
   createAudioPlayer,
   createAudioResource,
   AudioPlayerStatus,
-  VoiceConnection,
   StreamType,
+  VoiceConnection,
 } from "@discordjs/voice";
-import play from "play-dl";
-import { createReadStream } from "fs";
+import { spawn } from "child_process";
+import { google } from "googleapis";
+import { CommandInteractionOptionResolver } from "discord.js";
 
-export default new Command({
+// Configuração da API do YouTube
+const youtube = google.youtube("v3");
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+
+// Função para buscar vídeos no YouTube
+async function searchVideo(query: string): Promise<string | null> {
+  try {
+    console.log("🔍 Iniciando busca no YouTube...");
+    const response = await youtube.search.list({
+      part: ["snippet"],
+      q: query,
+      type: ["video"],
+      maxResults: 1,
+      key: YOUTUBE_API_KEY,
+    });
+
+    const items = response.data?.items;
+    if (!items || items.length === 0) {
+      console.log("❌ Nenhum vídeo encontrado para a pesquisa:", query);
+      return null;
+    }
+
+    console.log("🎥 Vídeo encontrado:", items[0].snippet?.title);
+    return `https://www.youtube.com/watch?v=${items[0].id?.videoId}`;
+  } catch (error) {
+    console.error("Erro ao buscar vídeo no YouTube:", error);
+    return null;
+  }
+}
+
+// Função para tocar música
+async function playMusic(url: string, voiceChannel: VoiceChannel) {
+  let connection: VoiceConnection | null = null;
+  let isConnectionDestroyed = false;
+
+  try {
+    console.log("🎵 Preparando para tocar música... URL:", url);
+
+    // Verifica se o `yt-dlp` está instalado
+    console.log("🔍 Verificando yt-dlp...");
+    const checkYtDl = spawn("yt-dlp", ["--version"]);
+    checkYtDl.on("error", () => {
+      throw new Error("yt-dlp não está instalado ou não foi encontrado no sistema.");
+    });
+
+    // Conecta ao canal de voz
+    console.log("🔗 Conectando ao canal de voz...");
+    connection = joinVoiceChannel({
+      channelId: voiceChannel.id,
+      guildId: voiceChannel.guild.id,
+      adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+    });
+
+    // Cria o processo do yt-dlp para obter o stream de áudio
+    console.log("🎧 Obtendo stream de áudio...");
+    const process = spawn("yt-dlp", [
+      "-f",
+      "bestaudio",
+      "--no-playlist",
+      "-o",
+      "-",
+      url,
+    ]);
+
+    process.stderr.on("data", (data) => {
+      console.error(`yt-dlp erro: ${data}`);
+    });
+
+    const resource = createAudioResource(process.stdout, {
+      inputType: StreamType.Arbitrary,
+    });
+
+    const player = createAudioPlayer();
+    console.log("▶️ Player criado. Iniciando reprodução...");
+    player.play(resource);
+    connection.subscribe(player);
+
+    // Eventos do player
+    player.on(AudioPlayerStatus.Idle, () => {
+      console.log("⏹ Música finalizada. Desconectando...");
+      if (connection && !isConnectionDestroyed) {
+        connection.destroy();
+        isConnectionDestroyed = true;
+      }
+    });
+
+    player.on("error", (error) => {
+      console.error("Erro no player:", error);
+      if (connection && !isConnectionDestroyed) {
+        connection.destroy();
+        isConnectionDestroyed = true;
+      }
+    });
+
+    console.log(`🎶 Tocando: ${url}`);
+  } catch (error) {
+    console.error("Erro ao tocar música:", error);
+    if (connection && !isConnectionDestroyed) {
+      connection.destroy();
+    }
+    throw new Error("Não foi possível tocar a música.");
+  }
+}
+
+// Comando music
+const command: CommandType = {
   name: "music",
-  description: "Tocar música do YouTube ou SoundCloud",
-  type: ApplicationCommandType.ChatInput,
+  description: "Tocar música por nome ou link do YouTube.",
   options: [
     {
-      name: "url",
-      description: "URL da música ou playlist do YouTube/SoundCloud",
-      type: 3, // Tipo de string (URL)
+      name: "query",
+      description: "Nome da música ou URL do YouTube",
+      type: 3, // Tipo STRING
       required: true,
     },
   ],
-  async run({ interaction }) {
-    if (!interaction.isChatInputCommand()) return;
+  run: async ({ interaction }) => {
+    console.log("📥 Comando 'music' recebido.");
+    const query = (interaction.options as CommandInteractionOptionResolver).getString("query", true);
 
-    const guild = interaction.guild as Guild;
     const member = interaction.member;
-
-    if (!(member instanceof GuildMember)) {
+    if (!(member instanceof GuildMember) || !member.voice.channel) {
+      console.log("❌ Usuário não está em um canal de voz.");
       return interaction.reply({
-        content: "Você precisa estar em um servidor para usar este comando.",
+        content: "Você precisa estar em um canal de voz para usar este comando!",
         ephemeral: true,
       });
     }
 
-    const userChannel = member.voice.channel as VoiceChannel;
-
-    if (!userChannel) {
-      return interaction.reply({
-        content:
-          "Você precisa estar em um canal de voz para usar este comando!",
-        ephemeral: true,
-      });
-    }
-
-    const musicUrl = interaction.options.getString("url", true);
-
-    // Validar o link do YouTube ou SoundCloud
-    const isValid = await play.validate(musicUrl);
-
-    if (
-      !isValid ||
-      (isValid !== "yt_video" &&
-        isValid !== "yt_playlist" &&
-        isValid !== "so_track" &&
-        isValid !== "so_playlist")
-    ) {
-      return interaction.reply({
-        content:
-          "O link fornecido não é válido! Por favor, insira um link válido do YouTube ou SoundCloud.",
-        ephemeral: true,
-      });
-    }
-
-    if (isValid === "yt_playlist" || isValid === "so_playlist") {
-      return interaction.reply({
-        content:
-          "Ainda não suportamos a reprodução de playlists. Por favor, forneça um link de música.",
-        ephemeral: true,
-      });
-    }
-
+    console.log("🎤 Usuário em canal de voz:", member.voice.channel.name);
     await interaction.deferReply();
 
     try {
-      // Conectar ao canal de voz
-      const connection: VoiceConnection = joinVoiceChannel({
-        channelId: userChannel.id,
-        guildId: guild.id,
-        adapterCreator: guild.voiceAdapterCreator,
-      });
+      let url = query;
 
-      console.log("Tentando obter o stream da URL...");
-      const stream = await play.stream(musicUrl);
-
-      console.log("Stream obtido com sucesso. Detalhes do stream:", stream);
-
-      // Criar o recurso de áudio
-      const resource = createAudioResource(stream.stream, {
-        inputType: stream.type, // Deve ser 'opus'
-      });
-
-      const player = createAudioPlayer();
-      player.play(resource);
-      connection.subscribe(player);
-
-      console.log("Recurso de áudio criado e tocando...");
-
-      await interaction.editReply({
-        content: `🎶 Tocando música: ${musicUrl}`,
-      });
-
-      // Tratamento de eventos do player
-      player.on("error", (error) => {
-        console.error("Erro no player:", error);
-        interaction.followUp({
-          content: "Ocorreu um erro ao reproduzir a música.",
-          ephemeral: true,
-        });
-      });
-
-      player.on(AudioPlayerStatus.Playing, () => {
-        console.log("🎵 Música está tocando...");
-      });
-
-      player.on(AudioPlayerStatus.Idle, () => {
-        console.log("⏹ Música finalizada. Desconectando...");
-        connection.destroy(); // Desconecta após a música terminar
-      });
-    } catch (error) {
-      console.error("Erro ao tocar música:", error);
-      await interaction.editReply({
-        content: "Ocorreu um erro ao tentar tocar a música.",
-      });
-
-      // Teste com áudio local em caso de erro
-      try {
-        const connection: VoiceConnection = joinVoiceChannel({
-          channelId: userChannel.id,
-          guildId: guild.id,
-          adapterCreator: guild.voiceAdapterCreator,
-        });
-
-        console.log("Tentando tocar áudio local para depuração...");
-        const resource = createAudioResource(
-          createReadStream("./audio.mp3"), // Certifique-se de que esse arquivo exista
-          { inputType: StreamType.Arbitrary }
-        );
-
-        const player = createAudioPlayer();
-        player.play(resource);
-        connection.subscribe(player);
-
-        await interaction.editReply({
-          content: `🎶 Não foi possível reproduzir o link. Tocando um áudio local para teste.`,
-        });
-      } catch (localError) {
-        console.error("Erro ao tentar tocar o áudio local:", localError);
-        await interaction.editReply({
-          content:
-            "Ocorreu um erro ao tentar tocar a música, nem mesmo o áudio local pôde ser reproduzido.",
-        });
+      // Se o query não for um link válido, faça uma busca no YouTube
+      if (!url.startsWith("https://www.youtube.com/watch")) {
+        console.log("🔎 Query não é um link válido. Buscando no YouTube...");
+        interaction.editReply("🔎 Buscando a música no YouTube...");
+        url = (await searchVideo(query)) || "";
+        if (!url) {
+          console.log("❌ Nenhum vídeo encontrado para a pesquisa:", query);
+          return interaction.editReply("❌ Nenhum vídeo encontrado para essa pesquisa.");
+        }
       }
+
+      // Tocar a música
+      console.log("🎶 Iniciando reprodução...");
+      await playMusic(url, member.voice.channel as VoiceChannel);
+      await interaction.editReply(`🎶 Tocando música: ${url}`);
+    } catch (error: any) {
+      console.error("Erro no comando 'music':", error);
+      await interaction.editReply(error.message || "Erro ao tocar música.");
     }
   },
-});
+};
+
+export default command;

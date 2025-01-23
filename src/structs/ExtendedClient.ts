@@ -53,17 +53,38 @@ export class ExtendedClient extends Client{
 
             fs.readdirSync(commandsPath + `/${local}/`).filter(fileCondition).forEach(async fileName => {
 
-                const command: CommandType = (await import(`../commands/${local}/${fileName}`))?.default;
-                const {name, buttons, selects, modals} = command
+                let command: CommandType | undefined;
 
-                if(name){
-                
-                    this.commands.set(name, command);
-                    slashCommands.push(command);
+                try {
+                    command = (await import(`../commands/${local}/${fileName}`))?.default;
+                } catch (error) {
+                    console.error(`❌ Falha ao importar o comando "${local}/${fileName}":\n`, error);
+                    return;
+                }
 
-                    if(buttons) buttons.forEach((run, key) => this.buttons.set(key, run));
-                    if(selects) selects.forEach((run, key) => this.selects.set(key, run));
-                    if(modals) modals.forEach((run, key) => this.modals.set(key, run));
+                if (!command) {
+                    console.error(`❌ O comando em "${local}/${fileName}" é inválido ou está malformado.`);
+                    return;
+                }
+
+                const { name, buttons, selects, modals } = command;
+
+                if (!name) {
+                    console.error(`❌ O comando em "${local}/${fileName}" está sem a propriedade 'name'.`);
+                    return;
+                }
+
+                this.commands.set(name, command);
+                slashCommands.push(command);
+
+                if (buttons) {
+                    buttons.forEach((run, key) => this.buttons.set(key, run));
+                }
+                if (selects) {
+                    selects.forEach((run, key) => this.selects.set(key, run));
+                }
+                if (modals) {
+                    modals.forEach((run, key) => this.modals.set(key, run));
                 }
             })
         })
@@ -78,17 +99,28 @@ export class ExtendedClient extends Client{
         fs.readdirSync(eventsPath).forEach(local => {
             fs.readdirSync(`${eventsPath}/${local}`).filter((fileCondition))
             .forEach(async fileName =>{
-                const {name, once, run}: EventType<keyof ClientEvents> = (await import(`../events/${local}/${fileName}`))?.default
+                let event: EventType<keyof ClientEvents>;
 
                 try {
-                
-                    if (name) (once) ? this.once(name, run) : this.on(name, run);
- 
+                    event = (await import(`../events/${local}/${fileName}`))?.default;
                 } catch (error) {
-                    console.log(`An error ocurred on event: ${name} \n ${error}`.red);
+                    console.error(`❌ Falha ao importar o evento "${local}/${fileName}":\n`, error);
+                    return;
+                }
+
+                const { name, once, run } = event || {};
+
+                if (!name || !run) {
+                    console.error(`❌ O evento em "${local}/${fileName}" está malformado ou sem propriedades obrigatórias.`);
+                    return;
+                }
+
+                try {
+                    once ? this.once(name, run) : this.on(name, run);
+                } catch (error) {
+                    console.error(`❌ Erro ao registrar o evento "${name}":\n`, error);
                 }
             })
         })
     }
 }
-
